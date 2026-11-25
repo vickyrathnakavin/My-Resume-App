@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Resume Builder & PDF Editor</title>
+<!-- PDF.js for reading existing PDF resumes -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- html2pdf.js for exporting clean A4 PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  :root {
+    --primary: #1e3a8a;
+    --secondary: #2563eb;
+    --bg: #f1f5f9;
+    --card: #ffffff;
+    --text: #1e293b;
+    --border: #cbd5e1;
+  }
+  * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--text); }
+  
+  /* Top Navigation Bar */
+  header {
+    background: var(--primary);
+    color: white;
+    padding: 14px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  header h1 { margin: 0; font-size: 1.2rem; display: flex; align-items: center; gap: 8px; }
+  .header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  
+  button, .file-btn {
+    border: none;
+    padding: 9px 14px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: 0.2s;
+  }
+  .btn-new { background: #475569; color: white; }
+  .btn-new:hover { background: #334155; }
+  .btn-upload { background: #f59e0b; color: #0f172a; }
+  .btn-upload:hover { background: #d97706; }
+  .btn-pdf { background: #10b981; color: white; }
+  .btn-pdf:hover { background: #059669; }
+  .btn-json { background: #e2e8f0; color: #0f172a; }
+
+  /* Mobile Tabs */
+  .mobile-tabs {
+    display: none;
+    background: #e2e8f0;
+    padding: 6px;
+    gap: 6px;
+  }
+  .mobile-tabs button {
+    flex: 1;
+    justify-content: center;
+    background: transparent;
+    color: #334155;
+  }
+  .mobile-tabs button.active {
+    background: var(--primary);
+    color: white;
+  }
+
+  /* Main Layout */
+  .container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    padding: 20px;
+    max-width: 1500px;
+    margin: auto;
+  }
+
+  /* Editor Panel */
+  .editor-panel {
+    background: var(--card);
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    max-height: calc(100vh - 90px);
+    overflow-y: auto;
+  }
+  .section-box {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 16px;
+    background: #fafafa;
+  }
+  .section-box h3 {
+    margin: 0 0 12px 0;
+    font-size: 1rem;
+    color: var(--primary);
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form-group { margin-bottom: 10px; }
+  label { display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 4px; color: #475569; }
+  input, textarea, select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.92rem;
+    background: white;
+  }
+  textarea { resize: vertical; min-height: 70px; }
+  .btn-add { background: var(--secondary); color: white; font-size: 0.8rem; padding: 5px 10px; }
+  .btn-del { background: #ef4444; color: white; font-size: 0.75rem; padding: 4px 8px; margin-top: 6px; }
+  .item-card {
+    background: white;
+    border: 1px solid #cbd5e1;
+    padding: 10px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+  }
+
+  /* Import Status Banner */
+  #importBanner {
+    display: none;
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    color: #92400e;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 14px;
+    font-size: 0.88rem;
+  }
+
+  /* Preview Panel */
+  .preview-wrapper {
+    background: #cbd5e1;
+    padding: 15px;
+    border-radius: 10px;
+    max-height: calc(100vh - 90px);
+    overflow-y: auto;
+    display: flex;
+    justify-content: center;
+  }
+  
+  /* A4 Resume Sheet */
+  #resume-preview {
+    width: 210mm;
+    min-height: 297mm;
+    background: white;
+    padding: 16mm 18mm;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    color: #1e293b;
+    line-height: 1.45;
+  }
+  .res-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2.5px solid var(--theme-color, #1e3a8a);
+    padding-bottom: 12px;
+    margin-bottom: 14px;
+  }
+  .res-name { font-size: 24px; font-weight: 800; color: var(--theme-color, #1e3a8a); margin: 0; text-transform: uppercase; }
+  .res-title { font-size: 14px; font-weight: 600; color: #475569; margin: 3px 0 6px 0; }
+  .res-contact { font-size: 12px; color: #334155; display: flex; flex-wrap: wrap; gap: 10px; }
+  .res-photo {
+    width: 85px;
+    height: 85px;
+    border-radius: 8px;
+    object-fit: cover;
+    border: 2px solid var(--theme-color, #1e3a8a);
+    display: none;
+  }
+  .res-sec { margin-bottom: 14px; }
+  .res-sec-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--theme-color, #1e3a8a);
+    border-bottom: 1px solid #cbd5e1;
+    padding-bottom: 3px;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+  }
+  .res-text { font-size: 12.5px; margin: 0; white-space: pre-line; }
+  .res-entry { margin-bottom: 9px; }
+  .res-entry-top { display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; }
+  .res-entry-sub { display: flex; justify-content: space-between; font-size: 12px; color: #475569; font-style: italic; margin-bottom: 3px; }
+  .skills-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .skill-tag {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    padding: 3px 9px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* Responsive Mobile View */
+  @media (max-width: 950px) {
+    .mobile-tabs { display: flex; }
+    .container { grid-template-columns: 1fr; padding: 10px; }
+    .editor-panel, .preview-wrapper { max-height: none; }
+    .hide-mobile { display: none !important; }
+    #resume-preview { width: 100%; min-height: auto; padding: 15px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📄 Smart Resume Builder</h1>
+  <div class="header-actions">
+    <label class="file-btn btn-upload" title="பழைய PDF அல்லது Backup கோப்பை உள்ளிடவும்">
+      📂 Import Old Resume (PDF/JSON)
+      <input type="file" id="importFile" accept=".pdf,.json" style="display:none" onchange="handleImport(event)">
+    </label>
+    <button class="btn-new" onclick="resetForm()">✨ New Resume</button>
+    <button class="btn-json" onclick="exportJSON()" title="எதிர்காலத்தில் Edit செய்ய சேமிக்கவும்">💾 Save Backup</button>
+    <button class="btn-pdf" onclick="downloadPDF()">⬇️ Download PDF</button>
+  </div>
+</header>
+
+<div class="mobile-tabs">
+  <button id="tabEdit" class="active" onclick="switchTab('edit')">✏️ Edit Details</button>
+  <button id="tabPreview" onclick="switchTab('preview')">👁️ Preview & PDF</button>
+</div>
+
+<div class="container">
+  <!-- LEFT: EDITOR -->
+  <div class="editor-panel" id="editorPanel">
+    <div id="importBanner"></div>
+
+    <!-- Theme & Photo -->
+    <div class="section-box">
+      <h3>🎨 வடிவமைப்பு & புகைப்படம் (Design & Photo)</h3>
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Theme Color (நிறம்)</label>
+          <select id="themeColor" onchange="updatePreview()">
+            <option value="#1e3a8a">Royal Blue (நீலம்)</option>
+            <option value="#0f172a">Classic Black (கருப்பு)</option>
+            <option value="#065f46">Emerald Green (பச்சை)</option>
+            <option value="#7f1d1d">Maroon Red (மெரூன்)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Profile Photo (விருப்பமிருந்தால்)</label>
+          <input type="file" id="photoInput" accept="image/*" onchange="handlePhoto(event)">
+        </div>
+      </div>
+    </div>
+
+    <!-- Personal Info -->
+    <div class="section-box">
+      <h3>👤 தனிப்பட்ட விவரங்கள் (Personal Details)</h3>
+      <div class="grid-2">
+        <div class="form-group">
+          <label>முழுப் பெயர் (Full Name)</label>
+          <input type="text" id="fullName" placeholder="எ.கா: S. சஷ்வந்த்" oninput="updatePreview()">
+        </div>
+        <div class="form-group">
+          <label>பதவி / தலைப்பு (Job Title)</label>
+          <input type="text" id="jobTitle" placeholder="எ.கா: Loan Officer / Accountant" oninput="updatePreview()">
+        </div>
+        <div class="form-group">
+          <label>மொபைல் எண் (Phone)</label>
+          <input type="text" id="phone" placeholder="+91 98765 43210" oninput="updatePreview()">
+        </div>
+        <div class="form-group">
+          <label>மின்னஞ்சல் (Email)</label>
+          <input type="email" id="email" placeholder="name@email.com" oninput="updatePreview()">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>முகவரி / ஊர் (Location)</label>
+        <input type="text" id="address" placeholder="மதுரை, தமிழ்நாடு" oninput="updatePreview()">
+      </div>
+    </div>
+
+    <!-- Career Objective / Summary -->
+    <div class="section-box">
+      <h3>🎯 சுயவிவரச் சுருக்கம் (Career Objective / Summary)</h3>
+      <textarea id="summary" placeholder="உங்கள் அனுபவம் மற்றும் தொழில் இலக்குகளை சுருக்கமாக எழுதவும்..." oninput="updatePreview()"></textarea>
+    </div>
+
+    <!-- Experience -->
+    <div class="section-box">
+      <h3>💼 பணி அனுபவம் (Work Experience) <button class="btn-add" onclick="addExp()">+ Add</button></h3>
+      <div id="expList"></div>
+    </div>
+
+    <!-- Education -->
+    <div class="section-box">
+      <h3>🎓 கல்வித் தகுதி (Education) <button class="btn-add" onclick="addEdu()">+ Add</button></h3>
+      <div id="eduList"></div>
+    </div>
+
+    <!-- Skills -->
+    <div class="section-box">
+      <h3>⚡ திறன்கள் (Skills - கமா போட்டு எழுதவும்)</h3>
+      <input type="text" id="skills" placeholder="MS Excel, Tally, Customer Handling, Communication" oninput="updatePreview()">
+    </div>
+  </div>
+
+  <!-- RIGHT: LIVE A4 PREVIEW -->
+  <div class="preview-wrapper hide-mobile" id="previewWrapper">
+    <div id="resume-preview">
+      <div class="res-header">
+        <div>
+          <h2 class="res-name" id="pName">உங்கள் பெயர்</h2>
+          <div class="res-title" id="pTitle">பதவி / துறை</div>
+          <div class="res-contact">
+            <span id="pPhone">📞 +91 00000 00000</span>
+            <span id="pEmail">✉️ email@example.com</span>
+            <span id="pAddress">📍 ஊர், மாநிலம்</span>
+          </div>
+        </div>
+        <img id="pPhoto" class="res-photo" alt="Photo">
+      </div>
+
+      <div class="res-sec" id="secSummary">
+        <div class="res-sec-title">Profile Summary</div>
+        <p class="res-text" id="pSummary">உங்கள் சுயவிவரச் சுருக்கம் இங்கே தோன்றும்.</p>
+      </div>
+
+      <div class="res-sec" id="secExp">
+        <div class="res-sec-title">Work Experience</div>
+        <div id="pExpList"></div>
+      </div>
+
+      <div class="res-sec" id="secEdu">
+        <div class="res-sec-title">Education</div>
+        <div id="pEduList"></div>
+      </div>
+
+      <div class="res-sec" id="secSkills">
+        <div class="res-sec-title">Key Skills</div>
+        <div class="skills-list" id="pSkills"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Configure PDF.js worker
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  let expData = [];
+  let eduData = [];
+  let photoBase64 = "";
+
+  // Load saved data from browser storage on startup
+  window.onload = function() {
+    const saved = localStorage.getItem('smart_resume_data');
+    if (saved) {
+      loadDataToForm(JSON.parse(saved));
+    } else {
+      addExp();
+      addEdu();
+      updatePreview();
+    }
+  };
+
+  function switchTab(tab) {
+    const ed = document.getElementById('editorPanel');
+    const pr = document.getElementById('previewWrapper');
+    if (tab === 'edit') {
+      ed.classList.remove('hide-mobile');
+      pr.classList.add('hide-mobile');
+      document.getElementById('tabEdit').classList.add('active');
+      document.getElementById('tabPreview').classList.remove('active');
+    } else {
+      ed.classList.add('hide-mobile');
+      pr.classList.remove('hide-mobile');
+      document.getElementById('tabPreview').classList.add('active');
+      document.getElementById('tabEdit').classList.remove('active');
+    }
+  }
+
+  function addExp(role = '', company = '', year = '', desc = '') {
+    expData.push({ role, company, year, desc });
+    renderExpInputs();
+    updatePreview();
+  }
+
+  function removeExp(index) {
+    expData.splice(index, 1);
+    renderExpInputs();
+    updatePreview();
+  }
+
+  function renderExpInputs() {
+    const container = document.getElementById('expList');
+    container.innerHTML = expData.map((item, i) => `
+      <div class="item-card">
+        <div class="grid-2">
+          <div class="form-group"><label>பதவி (Role)</label><input type="text" value="${item.role}" oninput="expData[${i}].role=this.value;updatePreview()"></div>
+          <div class="form-group"><label>நிறுவனம் (Company)</label><input type="text" value="${item.company}" oninput="expData[${i}].company=this.value;updatePreview()"></div>
+        </div>
+        <div class="form-group"><label>காலம் (Duration - எ.கா: 2022 - Present)</label><input type="text" value="${item.year}" oninput="expData[${i}].year=this.value;updatePreview()"></div>
+        <div class="form-group"><label>பணி விவரம் (Responsibilities)</label><textarea oninput="expData[${i}].desc=this.value;updatePreview()">${item.desc}</textarea></div>
+        <button class="btn-del" onclick="removeExp(${i})">🗑️ நீக்கு (Remove)</button>
+      </div>
+    `).join('');
+  }
+
+  function addEdu(degree = '', college = '', year = '', score = '') {
+    eduData.push({ degree, college, year, score });
+    renderEduInputs();
+    updatePreview();
+  }
+
+  function removeEdu(index) {
+    eduData.splice(index, 1);
+    renderEduInputs();
+    updatePreview();
+  }
+
+  function renderEduInputs() {
+    const container = document.getElementById('eduList');
+    container.innerHTML = eduData.map((item, i) => `
+      <div class="item-card">
+        <div class="grid-2">
+          <div class="form-group"><label>படிப்பு (Degree / Course)</label><input type="text" value="${item.degree}" oninput="eduData[${i}].degree=this.value;updatePreview()"></div>
+          <div class="form-group"><label>கல்லூரி / பள்ளி (Institution)</label><input type="text" value="${item.college}" oninput="eduData[${i}].college=this.value;updatePreview()"></div>
+        </div>
+        <div class="grid-2">
+          <div class="form-group"><label>வருடம் (Year)</label><input type="text" value="${item.year}" oninput="eduData[${i}].year=this.value;updatePreview()"></div>
+          <div class="form-group"><label>மதிப்பெண் (Percentage / CGPA)</label><input type="text" value="${item.score}" oninput="eduData[${i}].score=this.value;updatePreview()"></div>
+        </div>
+        <button class="btn-del" onclick="removeEdu(${i})">🗑️ நீக்கு (Remove)</button>
+      </div>
+    `).join('');
+  }
+
+  function handlePhoto(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+      photoBase64 = evt.target.result;
+      updatePreview();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function updatePreview() {
+    const color = document.getElementById('themeColor').value;
+    document.getElementById('resume-preview').style.setProperty('--theme-color', color);
+
+    const name = document.getElementById('fullName').value;
+    const title = document.getElementById('jobTitle').value;
+    const phone = document.getElementById('phone').value;
+    const email = document.getElementById('email').value;
+    const address = document.getElementById('address').value;
+    const summary = document.getElementById('summary').value;
+    const skills = document.getElementById('skills').value;
+
+    document.getElementById('pName').innerText = name || 'உங்கள் பெயர்';
+    document.getElementById('pTitle').innerText = title || 'பதவி / துறை';
+    document.getElementById('pPhone').innerText = phone ? `📞 ${phone}` : '';
+    document.getElementById('pEmail').innerText = email ? `✉️ ${email}` : '';
+    document.getElementById('pAddress').innerText = address ? `📍 ${address}` : '';
+
+    const imgEl = document.getElementById('pPhoto');
+    if (photoBase64) {
+      imgEl.src = photoBase64;
+      imgEl.style.display = 'block';
+    } else {
+      imgEl.style.display = 'none';
+    }
+
+    document.getElementById('secSummary').style.display = summary.trim() ? 'block' : 'none';
+    document.getElementById('pSummary').innerText = summary;
+
+    // Render Experience
+    const validExp = expData.filter(e => e.role || e.company);
+    document.getElementById('secExp').style.display = validExp.length ? 'block' : 'none';
+    document.getElementById('pExpList').innerHTML = validExp.map(e => `
+      <div class="res-entry">
+        <div class="res-entry-top"><span>${e.role}</span><span>${e.year}</span></div>
+        <div class="res-entry-sub"><span>${e.company}</span></div>
+        <p class="res-text">${e.desc}</p>
+      </div>
+    `).join('');
+
+    // Render Education
+    const validEdu = eduData.filter(e => e.degree || e.college);
+    document.getElementById('secEdu').style.display = validEdu.length ? 'block' : 'none';
+    document.getElementById('pEduList').innerHTML = validEdu.map(e => `
+      <div class="res-entry">
+        <div class="res-entry-top"><span>${e.degree}</span><span>${e.year}</span></div>
+        <div class="res-entry-sub"><span>${e.college}</span><span>${e.score}</span></div>
+      </div>
+    `).join('');
+
+    // Render Skills
+    const skillArr = skills.split(',').map(s => s.trim()).filter(Boolean);
+    document.getElementById('secSkills').style.display = skillArr.length ? 'block' : 'none';
+    document.getElementById('pSkills').innerHTML = skillArr.map(s => `<span class="skill-tag">${s}</span>`).join('');
+
+    // Auto-Save to LocalStorage
+    saveToLocal();
+  }
+
+  function getCurrentState() {
+    return {
+      themeColor: document.getElementById('themeColor').value,
+      fullName: document.getElementById('fullName').value,
+      jobTitle: document.getElementById('jobTitle').value,
+      phone: document.getElementById('phone').value,
+      email: document.getElementById('email').value,
+      address: document.getElementById('address').value,
+      summary: document.getElementById('summary').value,
+      skills: document.getElementById('skills').value,
+      expData,
+      eduData,
+      photoBase64
+    };
+  }
+
+  function saveToLocal() {
+    localStorage.setItem('smart_resume_data', JSON.stringify(getCurrentState()));
+  }
+
+  function loadDataToForm(data) {
+    document.getElementById('themeColor').value = data.themeColor || '#1e3a8a';
+    document.getElementById('fullName').value = data.fullName || '';
+    document.getElementById('jobTitle').value = data.jobTitle || '';
+    document.getElementById('phone').value = data.phone || '';
+    document.getElementById('email').value = data.email || '';
+    document.getElementById('address').value = data.address || '';
+    document.getElementById('summary').value = data.summary || '';
+    document.getElementById('skills').value = data.skills || '';
+    expData = data.expData && data.expData.length ? data.expData : [];
+    eduData = data.eduData && data.eduData.length ? data.eduData : [];
+    photoBase64 = data.photoBase64 || '';
+    renderExpInputs();
+    renderEduInputs();
+    updatePreview();
+  }
+
+  function resetForm() {
+    if (!confirm('புதிய Resume தொடங்க வேண்டுமா? தற்போதைய விவரங்கள் அழிக்கப்படும்.')) return;
+    localStorage.removeItem('smart_resume_data');
+    expData = [{ role: '', company: '', year: '', desc: '' }];
+    eduData = [{ degree: '', college: '', year: '', score: '' }];
+    photoBase64 = '';
+    document.getElementById('photoInput').value = '';
+    loadDataToForm({ expData, eduData });
+    document.getElementById('importBanner').style.display = 'none';
+  }
+
+  // Export editable JSON backup
+  function exportJSON() {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(getCurrentState(), null, 2));
+    const a = document.createElement('a');
+    a.href = dataStr;
+    const name = document.getElementById('fullName').value || 'Resume';
+    a.download = `${name.replace(/\s+/g, '_')}_Editable.json`;
+    a.click();
+  }
+
+  // Automatic Import of Existing PDF or JSON Resume
+  async function handleImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const banner = document.getElementById('importBanner');
+
+    if (file.name.endsWith('.json')) {
+      const text = await file.text();
+      loadDataToForm(JSON.parse(text));
+      banner.style.display = 'block';
+      banner.innerText = '✅ சேமிக்கப்பட்ட Resume கோப்பு வெற்றிகரமாகத் திறக்கப்பட்டது! இப்போது எளிதாக Edit செய்யலாம்.';
+      return;
+    }
+
+    if (file.name.endsWith('.pdf')) {
+      banner.style.display = 'block';
+      banner.innerText = '⏳ பழைய PDF Resume-லிருந்து தகவல்கள் தானாக எடுக்கப்படுகின்றன...';
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const lines = content.items.map(item => item.str).join(' ');
+          fullText += lines + '
+';
+        }
+        autoParseResumeText(fullText);
+        banner.innerText = '✅ PDF-லிருந்து பெயர், Email, Phone மற்றும் விவரங்கள் தானாக நிரப்பப்பட்டுள்ளன! தேவையான மாற்றங்களைச் செய்து கொள்ளுங்கள்.';
+      } catch (err) {
+        banner.innerText = '❌ இந்த PDF கோப்பைப் படிக்க முடியவில்லை (இது ஸ்கேன் செய்யப்பட்ட படமாக இருக்கலாம்).';
+      }
+    }
+  }
+
+  // Smart Auto-Parser for imported PDF text
+  function autoParseResumeText(text) {
+    const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    const phoneMatch = text.match(/(\+91[\-\s]?)?[6-9]\d{9}/);
+    
+    // Extract first meaningful words as Name
+    const cleanWords = text.trim().split(/\s+/);
+    const guessedName = cleanWords.slice(0, 2).join(' ');
+
+    if (guessedName) document.getElementById('fullName').value = guessedName;
+    if (emailMatch) document.getElementById('email').value = emailMatch[0];
+    if (phoneMatch) document.getElementById('phone').value = phoneMatch[0];
+
+    // Put extracted body into Summary so user can easily organize/edit sections
+    document.getElementById('summary').value = text.trim();
+    updatePreview();
+  }
+
+  // Generate & Download A4 PDF
+  function downloadPDF() {
+    const element = document.getElementById('resume-preview');
+    // Ensure preview is visible during capture on mobile
+    const wrapper = document.getElementById('previewWrapper');
+    const wasHidden = wrapper.classList.contains('hide-mobile');
+    if (wasHidden) wrapper.classList.remove('hide-mobile');
+
+    const name = document.getElementById('fullName').value || 'My_Resume';
+    const opt = {
+      margin: 0,
+      filename: `${name.replace(/\s+/g, '_')}_Resume.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opt).from(element).save().then(() => {
+      if (wasHidden) wrapper.classList.add('hide-mobile');
+    });
+  }
+</script>
+</body>
+</html>
